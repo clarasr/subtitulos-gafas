@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subtítulos</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+  #app{box-sizing:border-box;width:100%;height:100%;max-width:600px;max-height:600px;margin:0 auto;display:flex;flex-direction:column;padding:16px;gap:12px}
+  #status{font-size:15px;font-weight:800;letter-spacing:.14em;color:#9aa39e}
+  #status.on{color:#00e5a0}
+  #cap{flex:1;display:flex;flex-direction:column;justify-content:center;overflow:hidden;font-size:34px;line-height:1.1;font-weight:900;word-break:break-word}
+  #cap .interim{opacity:.5}
+  #prev{font-size:18px;font-weight:600;color:#7d867f;margin-top:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #probe{font-size:13px;line-height:1.3;color:#9aa39e;white-space:pre-line}
+  #err{font-size:15px;font-weight:700;color:#ffb3b3}
+  button{font:inherit;color:#013324;background:#00e5a0;border:0;border-radius:16px;min-height:56px;font-size:20px;font-weight:900}
+  button:focus{outline:4px solid #fff}
+  button.stop{background:#fff;color:#000}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="status">● PAUSADO</div>
+  <div id="cap"><span id="empty" style="opacity:.35">En pausa</span></div>
+  <div id="prev"></div>
+  <div id="err" role="alert"></div>
+  <div id="probe"></div>
+  <button id="btn" type="button">Empezar subtítulos</button>
+</div>
+<script>
+(function(){
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var $ = function(id){return document.getElementById(id)};
+  var status=$('status'), cap=$('cap'), prev=$('prev'), err=$('err'), btn=$('btn'), probe=$('probe');
+  var rec=null, want=false, last='';
+
+  // What this runtime offers: shown on screen so the result can be read off the glasses.
+  var gum = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  probe.textContent = 'SpeechRecognition: ' + (SR ? 'sí' : 'NO') + '\ngetUserMedia: ' + (gum ? 'sí' : 'NO') + '\nviewport: ' + innerWidth + '×' + innerHeight;
+
+  function render(final, interim){
+    cap.innerHTML='';
+    if(!final && !interim){cap.innerHTML='<span style="opacity:.35">'+(want?'Habla…':'En pausa')+'</span>';return}
+    var p=document.createElement('p'); p.style.margin=0;
+    p.appendChild(document.createTextNode(final+(final&&interim?' ':'')));
+    if(interim){var s=document.createElement('span'); s.className='interim'; s.textContent=interim; p.appendChild(s)}
+    cap.appendChild(p);
+  }
+  function make(){
+    var r=new SR(); r.lang='es-ES'; r.continuous=true; r.interimResults=true;
+    r.onresult=function(e){
+      err.textContent='';
+      var fin='', inter='';
+      for(var i=e.resultIndex;i<e.results.length;i++){
+        var t=e.results[i][0].transcript;
+        if(e.results[i].isFinal) fin+=t; else inter+=t;
+      }
+      if(fin.trim()){ if(last) prev.textContent=last; last=fin.trim(); render(last,''); }
+      else render(last, inter.trim());
+    };
+    r.onerror=function(e){
+      var c=e&&e.error;
+      if(c==='not-allowed'||c==='service-not-allowed'){want=false;setUi();err.textContent='Micrófono no permitido: '+c}
+      else if(c==='audio-capture'){want=false;setUi();err.textContent='No hay micrófono: audio-capture'}
+      else if(c!=='no-speech'&&c!=='aborted'){err.textContent='Error: '+c}
+    };
+    r.onend=function(){ if(want) setTimeout(function(){ try{rec=make();rec.start()}catch(x){} },250) };
+    return r;
+  }
+  function setUi(){
+    status.textContent = want ? '● ESCUCHANDO' : '● PAUSADO';
+    status.className = want ? 'on' : '';
+    btn.textContent = want ? 'Parar' : 'Empezar subtítulos';
+    btn.className = want ? 'stop' : '';
+    if(!want && !last) render('','');
+  }
+  function toggle(){
+    if(!SR){err.textContent='Este navegador no tiene reconocimiento de voz (SpeechRecognition).';return}
+    if(want){want=false;try{rec.stop()}catch(x){}setUi();return}
+    want=true; setUi(); err.textContent='';
+    try{rec=make();rec.start()}catch(x){want=false;setUi();err.textContent='No se pudo iniciar: '+x}
+  }
+  btn.addEventListener('click',toggle);
+  btn.focus();
+})();
+</script>
+</body>
+</html>
